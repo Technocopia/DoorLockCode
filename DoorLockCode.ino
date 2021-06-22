@@ -40,11 +40,7 @@ boolean valid = true;
 int parity(unsigned long int x);
 const char *filename = "/db.json";  // <- SD library uses 8.3 filenames
 const size_t CAPACITY = JSON_ARRAY_SIZE(300);
-// allocate the memory for the document
-StaticJsonDocument<CAPACITY> doc_read;
-StaticJsonDocument<CAPACITY> doc_write;
-JsonArray array_read = doc_read.to<JsonArray>();
-JsonArray array_write = doc_write.to<JsonArray>();
+
 //portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 // Wiegand 0 bit ISR. Triggered by wiegand 0 wire.
 bool loadCardMode = false;
@@ -108,44 +104,7 @@ void setup() {
 	pinMode(SCK, INPUT_PULLUP);
 	pinMode(MOSI, INPUT_PULLUP);
 	pinMode(MISO, INPUT_PULLUP);
-	// Initialize SD library
-#if defined ARDUINO_ARCH_ESP32
-	for (int i=0;i<3&&!SD.begin(SS, SPI);i++)  {
-#else
-		for (int i=0;i<2&&!SD.begin(SS );i++)  {
-#endif
-		Serial.println(F("Failed to initialize SD library"));
-		delay(1000);
-	}
-	if (!SD.exists(filename)) {
-		File fileTest = (File) SD.open(filename, FILE_WRITE);
-		Serial.println(F("Database missing"));
-		fileTest.close();
-		//ESP.restart();
-	}else{
 
-		DeserializationError err;
-		do {
-			File f_l = (File) SD.open(filename, FILE_READ);
-			if (f_l) {
-				Serial.println(
-						"File " + String(filename) + " timeout: "
-								);
-	//		// parse a JSON array
-				err = deserializeJson(doc_read, f_l);
-				f_l.close();
-				Serial.println("deserialize result " + String(err.c_str()));
-
-				if (err == DeserializationError::Ok) {
-					Serial.println(F("on boot Print config file..."));
-					printFile(filename);
-					Serial.println("Number of cards " + String(array_read.size()));
-				}
-			} else {
-				Serial.println("File open failed!");
-			}
-		} while (err != DeserializationError::Ok);
-	}
 	// Dump config file
 //	Serial.println(F("Print config file..."));
 //	printFile(filename);
@@ -239,70 +198,10 @@ void IRAM_ATTR loop() {
 #else
 	void loop() {
 #endif
-	if (!digitalRead(button) ) {
-		open();
-		return;
-	}
-	if (!digitalRead(loadcard) && loadCardMode == false) {
-		// load card mode
-		loadCardMode = true;
-		startLoadCardMode = millis();
-		Serial.println("Start load card mode");
-		digitalWrite(DoorE, LOW);
-		delay(200);
-		digitalWrite(DoorE, HIGH);
-		delay(100);
-		digitalWrite(DoorE, LOW);
-		delay(200);
-		digitalWrite(DoorE, HIGH);
-		delay(100);
-	}
-	if (loadCardMode && (((millis() - startLoadCardMode) > 20000)||!digitalRead(loadcard))) {
-		loadCardMode = false;
-		Serial.println("End load Card Mode, writing");
-		// serialize the array and send the result to Serial
-		File file = (File) SD.open(filename, FILE_WRITE);
-		serializeJson(doc_read, file);
-		file.flush();
-		file.close();
-		printFile(filename);
-		digitalWrite(DoorE, LOW);
-		delay(200);
-		digitalWrite(DoorE, HIGH);
-		delay(100);
-		digitalWrite(DoorE, LOW);
-		delay(200);
-		digitalWrite(DoorE, HIGH);
-		delay(100);
-	}
+
 	if (haveCard()) { // The reader hasn't sent a bit in 2000 units of time. Process card.
 		int card = getIDOfCurrentCard();
-		//Keyboard.println(String(card));
-		for (JsonVariant v : array_read) {
-			//Serial.println("Checking "+String(cards[i]));
-			if (v.as<int>() == card) { // Is it in the DB?
-				Serial.println(
-						"\t\tMatch! " + String(card) + " to card form list "
-								+ String(v.as<int>()));
-				if (!loadCardMode) open();
-				return;
-			}
-		}
-		if (loadCardMode) {
-			Serial.println("Adding card! " + String(card));
-			array_read.add(card);
-			startLoadCardMode = millis();
-		} else {
-			Serial.println("Error! " + String(card));
-			//digitalWrite(DoorE, HIGH);
-			digitalWrite(DoorE, LOW);
-			delay(500);
-			digitalWrite(DoorE, HIGH);
-			delay(500);
-			digitalWrite(DoorE, LOW);
-			delay(500);
-			digitalWrite(DoorE, HIGH);
-		}
+		Serial.println("Got card: "+String(card));
 	} else {
 		delay(30);
 	}
