@@ -19,14 +19,12 @@
 #define loadcard 6
 #endif
 #include <Arduino.h>
+#include <SimplePacketComs.h>
+#include <TinyUSBSimplePacketComs.h>
+#include "CardReadCommand.h"
 //#include "codes.h" // also where #define sitecode is
 //#define NUM_STATIC_CARDS (sizeof(cards) / sizeof(unsigned long int))
-#include <ArduinoJson.h>
-#include <SD.h>
-#include <SPI.h>
-#if defined ARDUINO_ARCH_ESP32
-#include <FS.h>
-#endif
+
 
 // Configuration that we'll store on disk
 
@@ -39,8 +37,9 @@ unsigned int timeout = 1000;
 boolean valid = true;
 int parity(unsigned long int x);
 const char *filename = "/db.json";  // <- SD library uses 8.3 filenames
-const size_t CAPACITY = JSON_ARRAY_SIZE(300);
+TinyUSBSimplePacketComs coms;
 
+CardReadCommand * command;
 //portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
 // Wiegand 0 bit ISR. Triggered by wiegand 0 wire.
 bool loadCardMode = false;
@@ -77,37 +76,15 @@ void IRAM_ATTR W1ISR() {
 
 }
 
-// Prints the content of a file to the Serial
-void printFile(const char *filename) {
-	// Open file for reading
-	File file = (File) SD.open(filename, FILE_READ);
-	if (!file) {
-		Serial.println(F("Failed to read file"));
-		return;
-	}
-
-	// Extract each characters by one by one
-	while (file.available()) {
-		Serial.print((char) file.read());
-	}
-	Serial.println();
-
-	// Close the file (File's destructor doesn't close the file)
-	file.close();
-}
 
 void setup() {
-	// put your setup code here, to run once:
+	coms.initializeUSB();
 	Serial.begin(115200);
-	// create an empty array
-	pinMode(SS, INPUT_PULLUP);
-	pinMode(SCK, INPUT_PULLUP);
-	pinMode(MOSI, INPUT_PULLUP);
-	pinMode(MISO, INPUT_PULLUP);
+	USBDevice.setID(0x16c0, 0x486);
+	while( !USBDevice.mounted() ) delay(1);
+	command=new CardReadCommand();
+	coms.attach(command);
 
-	// Dump config file
-//	Serial.println(F("Print config file..."));
-//	printFile(filename);
 
 	pinMode(W0, INPUT_PULLUP);
 	pinMode(W1, INPUT_PULLUP);
@@ -131,7 +108,7 @@ void setup() {
 	attachInterrupt(digitalPinToInterrupt(W0), W0ISR, FALLING);
 	attachInterrupt(digitalPinToInterrupt(W1), W1ISR, FALLING);
 
-	for (int i = 0; i < sizeof(bits); i++)
+	for (unsigned int i = 0; i < sizeof(bits); i++)
 		bits[i] = 0;
 	digitalWrite(DoorP, LOW);
 	digitalWrite(DoorE, HIGH);
@@ -202,6 +179,7 @@ void IRAM_ATTR loop() {
 	if (haveCard()) { // The reader hasn't sent a bit in 2000 units of time. Process card.
 		int card = getIDOfCurrentCard();
 		Serial.println("Got card: "+String(card));
+		command->recentCard=card;
 	} else {
 		delay(30);
 	}
