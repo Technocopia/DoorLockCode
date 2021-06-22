@@ -175,14 +175,14 @@ void IRAM_ATTR loop() {
 #else
 	void loop() {
 #endif
-
+	coms.server();
 	if (haveCard()) { // The reader hasn't sent a bit in 2000 units of time. Process card.
 		int card = getIDOfCurrentCard();
 		Serial.println("Got card: "+String(card));
 		command->recentCard=card;
-	} else {
-		delay(30);
 	}
+	delay(30);
+
 
 }
 
