@@ -124,7 +124,7 @@ void open() {
 }
 
 bool haveCard() {
-	return (((millis() - timeout) > 500) && bitcnt > 30);
+	return (((millis() - timeout) > 100) && bitcnt > 30);
 }
 
 long int getIDOfCurrentCard() {
